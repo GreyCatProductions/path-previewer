@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Path Visualizer</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 20px;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      font-family: monospace;
+    }
+    #canvasWrapper {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      display: inline-block;
+    }
+    button {
+      margin-top: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Path Visualizer</h1>
+
+  <textarea id="input"></textarea>
+  <br/>
+  <button onclick="draw()">Draw</button>
+
+  <div id="canvasWrapper">
+    <canvas id="canvas" width="500" height="500"></canvas>
+  </div>
+
+<script>
+/* ================= PARSING ================= */
+
+function parseInput(text) {
+  const paths = [];
+  const first = [];
+  const final = [];
+  const hints = [];
+
+  // path(x1,y1,x2,y2)
+  const pathRegex = /path\((\d+),(\d+),(\d+),(\d+)\)/g;
+  let m;
+  while ((m = pathRegex.exec(text)) !== null) {
+    paths.push({
+      x1: +m[1], y1: +m[2],
+      x2: +m[3], y2: +m[4]
+    });
+  }
+
+  // first(x,y)
+  const firstRegex = /first\((\d+),(\d+)\)/g;
+  while ((m = firstRegex.exec(text)) !== null) {
+    first.push({ x: +m[1], y: +m[2] });
+  }
+
+  // final(x,y)
+  const finalRegex = /final\((\d+),(\d+)\)/g;
+  while ((m = finalRegex.exec(text)) !== null) {
+    final.push({ x: +m[1], y: +m[2] });
+  }
+
+  // hint(x,y,n)
+  const hintRegex = /hint\((\d+),(\d+),(\d+)\)/g;
+  while ((m = hintRegex.exec(text)) !== null) {
+    hints.push({ x: +m[1], y: +m[2], n: +m[3] });
+  }
+
+  return { paths, first, final, hints };
+}
+
+function getGridSize(data) {
+  let maxX = 1, maxY = 1;
+
+  for (const p of data.paths) {
+    maxX = Math.max(maxX, p.x1, p.x2);
+    maxY = Math.max(maxY, p.y1, p.y2);
+  }
+  for (const f of data.first) {
+    maxX = Math.max(maxX, f.x);
+    maxY = Math.max(maxY, f.y);
+  }
+  for (const f of data.final) {
+    maxX = Math.max(maxX, f.x);
+    maxY = Math.max(maxY, f.y);
+  }
+  for (const h of data.hints) {
+    maxX = Math.max(maxX, h.x);
+    maxY = Math.max(maxY, h.y);
+  }
+
+  return { cols: maxX, rows: maxY };
+}
+
+/* ================= DRAWING ================= */
+
+function pos(x, y, rows, cell, margin) {
+  return {
+    px: margin + (x - 0.5) * cell,
+    py: margin + (rows - y + 0.5) * cell
+  };
+}
+
+function drawGrid(ctx, cols, rows, cell, margin) {
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#aaa";
+  ctx.font = "12px sans-serif";
+  ctx.fillStyle = "#000";
+
+  // grid lines
+  for (let c = 0; c <= cols; c++) {
+    const x = margin + c * cell;
+    ctx.beginPath();
+    ctx.moveTo(x, margin);
+    ctx.lineTo(x, margin + rows * cell);
+    ctx.stroke();
+  }
+  for (let r = 0; r <= rows; r++) {
+    const y = margin + r * cell;
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(margin + cols * cell, y);
+    ctx.stroke();
+  }
+
+  // point labels
+  for (let x = 1; x <= cols; x++) {
+    for (let y = 1; y <= rows; y++) {
+      const { px, py } = pos(x, y, rows, cell, margin);
+
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#333";
+      ctx.fillText(`${x},${y}`, px + 20, py - 20);
+    }
+  }
+}
+
+function drawPaths(ctx, data, cols, rows, cell, margin) {
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#0077ff";
+
+  for (const p of data.paths) {
+    const p1 = pos(p.x1, p.y1, rows, cell, margin);
+    const p2 = pos(p.x2, p.y2, rows, cell, margin);
+
+    ctx.beginPath();
+    ctx.moveTo(p1.px, p1.py);
+    ctx.lineTo(p2.px, p2.py);
+    ctx.stroke();
+  }
+}
+
+function drawSpecialMarkers(ctx, data, cols, rows, cell, margin) {
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // FIRST → green
+  for (const f of data.first) {
+    const { px, py } = pos(f.x, f.y, rows, cell, margin);
+    ctx.fillStyle = "green";
+    ctx.beginPath();
+    ctx.arc(px, py, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // FINAL → red
+  for (const f of data.final) {
+    const { px, py } = pos(f.x, f.y, rows, cell, margin);
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(px, py, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // HINTS → yellow + number
+  for (const h of data.hints) {
+    const { px, py } = pos(h.x, h.y, rows, cell, margin);
+
+    ctx.fillStyle = "yellow";
+    ctx.beginPath();
+    ctx.arc(px, py, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "black";
+    ctx.fillText(h.n, px, py);
+  }
+}
+
+function draw() {
+  const text = document.getElementById("input").value;
+  const data = parseInput(text);
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const { cols, rows } = getGridSize(data);
+
+  const margin = 40;
+  const cell = Math.min(
+    (canvas.width - margin * 2) / cols,
+    (canvas.height - margin * 2) / rows
+  );
+
+  drawGrid(ctx, cols, rows, cell, margin);
+  drawPaths(ctx, data, cols, rows, cell, margin);
+  drawSpecialMarkers(ctx, data, cols, rows, cell, margin);
+}
+
+/* ======== Example preload ======== */
+
+document.getElementById("input").value =
+`
+first(1,1).
+final(3,3).
+
+hint(2,1,2).
+hint(2,2,2).
+
+path(1,1,2,1) path(2,1,3,1) path(1,2,1,3) path(1,3,2,3) path(3,1,3,2) path(2,2,1,2) path(3,2,2,2) path(2,3,3,3)
+`;
+
+draw();
+</script>
+</body>
+</html>
