@@ -7,9 +7,12 @@ A small HTML tool to display grids, paths, hints, and arrows for debugging grid-
 3. Press **Draw** to update the visualization.
 
 ## Format
-first(X,Y) gets marked with a green dot
+first(X,Y) gets marked with a green dot 
+
 final(X,Y) gets marked with a red dot
+
 hint(X,Y,N) gets marked with a yellow dot and a number inside
+
 path(X,Y,XT,YT) draws a line from (X,Y) to (XT,YT)
 
 ## Example
